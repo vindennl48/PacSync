@@ -173,7 +173,9 @@ EOF
 # Modules can also define their own 'packages' and 'aur_packages' arrays.
 modules=(
   # install_cowsay
+  # install_openssh
   # install_plasma
+  # install_xrdp
 )
 EOF
 

@@ -35,7 +35,7 @@ install() {
   sudo systemctl enable sshd.service
   sudo systemctl start sshd.service
 
-  echo "      XRDP configuration complete!"
+  echo "      OpenSSH configuration complete!"
 }
 
 uninstall() {
