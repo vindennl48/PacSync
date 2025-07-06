@@ -124,7 +124,7 @@ packages=(
 EOF
 
     # Dynamically append the list of currently installed packages into the array
-    pacman -Qeq | sed 's/^/  /' >> "${CONFIG_FILE}"
+    pacman -Qeq | sed 's/^/  /' >> "${CONFIG_FILE}" || true
 
     # Write the static footer that closes the packages array and defines the modules array
     cat << 'EOF' >> "${CONFIG_FILE}"
@@ -136,7 +136,7 @@ aur_packages=(
   # --- For safety, all currently installed foreign (AUR) packages have been added below. ---
 EOF
     # Append currently installed foreign (AUR) packages
-    pacman -Qemq | sed 's/^/  /' >> "${CONFIG_FILE}"
+    pacman -Qemq | sed 's/^/  /' >> "${CONFIG_FILE}" || true
 
     cat << 'EOF' >> "${CONFIG_FILE}"
 )
