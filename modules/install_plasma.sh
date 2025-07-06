@@ -4,6 +4,7 @@
 # The main script will ensure these are installed.
 packages=(
   plasma-meta
+  kde-applications-meta
 )
 
 # The main function that will be executed by the sync script
