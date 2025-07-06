@@ -50,7 +50,7 @@ install_yay_if_needed() {
     info "yay is not installed. Attempting to install it..."
     
     # Install dependencies
-    sudo pacman -S --needed --noconfirm git base-devel
+    pacman -S --needed --noconfirm git base-devel
     
     # Create a temporary directory for building
     local build_dir
@@ -58,20 +58,32 @@ install_yay_if_needed() {
     
     # Use a trap to ensure the cleanup function is called on exit or error
     trap 'rm -rf "$build_dir"' EXIT
+
+    # This allows the non-root 'makepkg' process to write to it.
+    if [[ -n "$SUDO_USER" ]]; then
+        chown "${SUDO_UID}:${SUDO_GID}" "$build_dir"
+    fi
     
     cd "$build_dir" || { error "Could not enter temporary build directory."; return 1; }
     
     # Clone, build, and install yay
     info "Cloning yay from the AUR..."
-    git clone https://aur.archlinux.org/yay.git
+    # It's better to run the clone as the user as well for file ownership consistency
+    if [[ -n "$SUDO_USER" ]]; then
+        sudo -u "$SUDO_USER" git clone https://aur.archlinux.org/yay.git
+    else
+        git clone https://aur.archlinux.org/yay.git
+    fi
+    
     cd yay || { error "Could not enter cloned yay directory."; return 1; }
     
     info "Building and installing yay..."
-    # Run makepkg as the original user to avoid permissions issues
+    # Run makepkg as the original user to avoid permissions issues and security risks
     if [[ -n "$SUDO_USER" ]]; then
         sudo -u "$SUDO_USER" makepkg -si --noconfirm
     else
-        # Fallback for running directly as root, though not recommended
+        # Fallback for running directly as root, though not recommended for makepkg
+        warning "Running makepkg as root. This is not recommended for security."
         makepkg -si --noconfirm
     fi
     
