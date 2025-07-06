@@ -196,7 +196,13 @@ resolve_package_list() {
 
 update_system() {
     info "Starting full system upgrade (Official Repos + AUR)..."
-    yay -Syu --noconfirm
+    # Run yay as the original user. yay will handle its own sudo calls internally.
+    if [[ -n "$SUDO_USER" ]]; then
+        sudo -u "$SUDO_USER" yay -Syu --noconfirm
+    else
+        # Fallback if run directly as root
+        yay -Syu --noconfirm
+    fi
     success "System is up-to-date."
 }
 
@@ -241,13 +247,22 @@ sync_aur_packages() {
         return
     fi
     info "Syncing AUR packages..."
-    yay -S --needed --noconfirm "${packages_to_sync[@]}"
+    if [[ -n "$SUDO_USER" ]]; then
+        sudo -u "$SUDO_USER" yay -S --needed --noconfirm "${packages_to_sync[@]}"
+    else
+        yay -S --needed --noconfirm "${packages_to_sync[@]}"
+    fi
     
     info "Calculating extraneous AUR packages to remove..."
     local desired_aur_list
     desired_aur_list=$(printf "%s\n" "${packages_to_sync[@]}" | sort -u)
     local installed_aur_packages
-    installed_aur_packages=$(yay -Qemq | sort)
+    # This query doesn't need privileges, but running as user is consistent.
+    if [[ -n "$SUDO_USER" ]]; then
+        installed_aur_packages=$(sudo -u "$SUDO_USER" yay -Qemq | sort)
+    else
+        installed_aur_packages=$(yay -Qemq | sort)
+    fi
     
     # First, find all packages that are installed but not in the config.
     local to_remove_raw
@@ -260,7 +275,11 @@ sync_aur_packages() {
     if [[ -n "$to_remove" ]]; then
         info "The following AUR packages are installed but not in the config; they will be REMOVED:"
         printf "${C_RED}%s\n${C_NC}" "${to_remove}"
-        yay -Rns --noconfirm ${to_remove}
+        if [[ -n "$SUDO_USER" ]]; then
+            sudo -u "$SUDO_USER" yay -Rns --noconfirm ${to_remove}
+        else
+            yay -Rns --noconfirm ${to_remove}
+        fi
     else
         success "No extraneous AUR packages to remove."
     fi
@@ -269,11 +288,20 @@ sync_aur_packages() {
 clean_orphans() {
     info "Checking for orphan packages..."
     local orphans
-    orphans=$(yay -Qdtq || true)
+    if [[ -n "$SUDO_USER" ]]; then
+        orphans=$(sudo -u "$SUDO_USER" yay -Qdtq || true)
+    else
+        orphans=$(yay -Qdtq || true)
+    fi
+
     if [[ -n "$orphans" ]]; then
         info "The following orphan packages will be REMOVED:"
         printf "${C_YELLOW}%s\n${C_NC}" "${orphans}"
-        yay -Rns --noconfirm ${orphans}
+        if [[ -n "$SUDO_USER" ]]; then
+            sudo -u "$SUDO_USER" yay -Rns --noconfirm ${orphans}
+        else
+            yay -Rns --noconfirm ${orphans}
+        fi
     else
         success "No orphan packages found."
     fi
@@ -290,7 +318,11 @@ clean_cache() {
         pacman -Sc --noconfirm
     fi
     info "Cleaning yay's build cache and downloaded archives..."
-    yay -Scc --noconfirm
+    if [[ -n "$SUDO_USER" ]]; then
+        sudo -u "$SUDO_USER" yay -Scc --noconfirm
+    else
+        yay -Scc --noconfirm
+    fi
     success "Caches cleaned."
 }
 
