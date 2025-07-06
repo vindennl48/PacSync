@@ -15,6 +15,12 @@ set -euo pipefail
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 MODULES_DIR="${SCRIPT_DIR}/modules"
 
+# Packages that the script manages or depends on, which should never be auto-removed.
+readonly PACKAGES_TO_IGNORE=(
+  'yay'
+  'yay-debug'
+)
+
 CONFIG_FILE=""
 MODULE_STATE_FILE="" # Will be set in main()
 
@@ -43,7 +49,6 @@ error() {
 }
 
 install_yay_if_needed() {
-    # If yay is already present, we don't need to do anything.
     if command -v yay &> /dev/null; then
         return 0
     fi
@@ -60,7 +65,8 @@ install_yay_if_needed() {
     # Use a trap to ensure the cleanup function is called on exit or error
     trap 'rm -rf "$build_dir"' EXIT
 
-    # Change ownership of the build directory to the original user
+    # --- FIX: Change ownership of the build directory to the original user ---
+    # This allows the non-root 'makepkg' process to write to it.
     if [[ -n "$SUDO_USER" ]]; then
         chown "${SUDO_UID}:${SUDO_GID}" "$build_dir"
     fi
@@ -69,6 +75,7 @@ install_yay_if_needed() {
     
     # Clone, build, and install yay
     info "Cloning yay from the AUR..."
+    # It's better to run the clone as the user as well for file ownership consistency
     if [[ -n "$SUDO_USER" ]]; then
         sudo -u "$SUDO_USER" git clone https://aur.archlinux.org/yay.git
     else
@@ -78,9 +85,11 @@ install_yay_if_needed() {
     cd yay || { error "Could not enter cloned yay directory."; return 1; }
     
     info "Building and installing yay..."
+    # Run makepkg as the original user to avoid permissions issues and security risks
     if [[ -n "$SUDO_USER" ]]; then
         sudo -u "$SUDO_USER" makepkg -si --noconfirm
     else
+        # Fallback for running directly as root, though not recommended for makepkg
         warning "Running makepkg as root. This is not recommended for security."
         makepkg -si --noconfirm
     fi
@@ -89,18 +98,9 @@ install_yay_if_needed() {
     trap - EXIT
     rm -rf "$build_dir"
 
-    # Verify installation and update the config file
+    # Verify installation
     if command -v yay &> /dev/null; then
         success "yay has been successfully installed!"
-        
-        # --- FIX: Add yay and yay-debug to the config file to prevent removal ---
-        info "Adding 'yay' and 'yay-debug' to ${CONFIG_FILE} to prevent removal..."
-        # We use sed to append the new packages right after the 'packages=(' line.
-        # The '\n' ensures they are on separate lines, and the '  ' provides indentation.
-        sed -i '/^packages=(/a \  yay\n  yay-debug' "${CONFIG_FILE}"
-        success "'yay' and 'yay-debug' have been added to your configuration."
-        # --- END FIX ---
-        
         return 0
     else
         error "Failed to install yay. Please install it manually."
@@ -213,8 +213,18 @@ sync_packages() {
     fully_resolved_list=$(resolve_package_list "${packages_to_sync[*]}")
     local installed_packages
     installed_packages=$(pacman -Qeq)
+    
+    # First, find all packages that are installed but not in the config.
+    local to_remove_raw
+    to_remove_raw=$(comm -13 <(echo "${fully_resolved_list}" | tr ' ' '\n' | sort) <(echo "${installed_packages}" | sort))
+
+    # --- FIX: Filter out packages from our ignore list ---
+    # This prevents the script from uninstalling its own dependencies (e.g., yay).
+    # grep options: -v (invert), -x (exact line), -F (fixed string), -f (read patterns from file/process).
+    # The '|| true' prevents the script from exiting if grep finds no packages to remove.
     local to_remove
-    to_remove=$(comm -13 <(echo "${fully_resolved_list}" | tr ' ' '\n' | sort) <(echo "${installed_packages}" | sort))
+    to_remove=$(echo "${to_remove_raw}" | grep -v -x -F -f <(printf "%s\n" "${PACKAGES_TO_IGNORE[@]}") || true)
+    
     if [[ -n "$to_remove" ]]; then
         info "The following official packages are installed but not in the config; they will be REMOVED:"
         printf "${C_RED}%s\n${C_NC}" "${to_remove}"
@@ -231,18 +241,22 @@ sync_aur_packages() {
         return
     fi
     info "Syncing AUR packages..."
-    # Yay automatically handles --needed and group expansion
     yay -S --needed --noconfirm "${packages_to_sync[@]}"
     
     info "Calculating extraneous AUR packages to remove..."
     local desired_aur_list
     desired_aur_list=$(printf "%s\n" "${packages_to_sync[@]}" | sort -u)
     local installed_aur_packages
-    installed_aur_packages=$(yay -Qemq | sort) # -Qemq lists foreign (AUR) packages
+    installed_aur_packages=$(yay -Qemq | sort)
     
+    # First, find all packages that are installed but not in the config.
+    local to_remove_raw
+    to_remove_raw=$(comm -13 <(echo "${desired_aur_list}") <(echo "${installed_aur_packages}"))
+
+    # --- FIX: Filter out packages from our ignore list ---
     local to_remove
-    to_remove=$(comm -13 <(echo "${desired_aur_list}") <(echo "${installed_aur_packages}"))
-    
+    to_remove=$(echo "${to_remove_raw}" | grep -v -x -F -f <(printf "%s\n" "${PACKAGES_TO_IGNORE[@]}") || true)
+
     if [[ -n "$to_remove" ]]; then
         info "The following AUR packages are installed but not in the config; they will be REMOVED:"
         printf "${C_RED}%s\n${C_NC}" "${to_remove}"
