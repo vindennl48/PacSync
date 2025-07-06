@@ -65,7 +65,7 @@ install_yay_if_needed() {
     # Use a trap to ensure the cleanup function is called on exit or error
     trap 'rm -rf "$build_dir"' EXIT
 
-    # --- FIX: Change ownership of the build directory to the original user ---
+    # Change ownership of the build directory to the original user
     # This allows the non-root 'makepkg' process to write to it.
     if [[ -n "$SUDO_USER" ]]; then
         chown "${SUDO_UID}:${SUDO_GID}" "$build_dir"
@@ -128,18 +128,20 @@ create_config_file() {
 # --- An array of standard packages to be installed ---
 # These can be individual packages or pacman groups like 'gnome'.
 packages=(
-  # --- Core System & Utilities (Examples) ---
+  # --- Utilities ---
   # git
   # vim
+  # less
   # htop
 
-  # --- Desktop Environment & GUI Apps (Examples) ---
+  # --- Desktop Environment & GUI Apps ---
   # gnome
   # firefox
   # vlc
 
   # --- For safety, all currently installed explicit packages have been added below. ---
   # --- Please review this list and curate it to your needs. ---
+  # --- Core System ---
 EOF
 
     # Dynamically append the list of currently installed packages into the array
@@ -224,7 +226,7 @@ sync_packages() {
     local to_remove_raw
     to_remove_raw=$(comm -13 <(echo "${fully_resolved_list}" | tr ' ' '\n' | sort) <(echo "${installed_packages}" | sort))
 
-    # --- FIX: Filter out packages from our ignore list ---
+    # --- Filter out packages from our ignore list ---
     # This prevents the script from uninstalling its own dependencies (e.g., yay).
     # grep options: -v (invert), -x (exact line), -F (fixed string), -f (read patterns from file/process).
     # The '|| true' prevents the script from exiting if grep finds no packages to remove.
@@ -268,7 +270,7 @@ sync_aur_packages() {
     local to_remove_raw
     to_remove_raw=$(comm -13 <(echo "${desired_aur_list}") <(echo "${installed_aur_packages}"))
 
-    # --- FIX: Filter out packages from our ignore list ---
+    # Filter out packages from our ignore list
     local to_remove
     to_remove=$(echo "${to_remove_raw}" | grep -v -x -F -f <(printf "%s\n" "${PACKAGES_TO_IGNORE[@]}") || true)
 
