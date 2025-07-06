@@ -1,11 +1,10 @@
 #!/bin/bash
 
 # ==============================================================================
-# pacman-sync.sh - A wrapper for pacman to sync system state with a config file.
+# PacSync - A wrapper for pacman to sync system state with a config file.
 #
 # Author: Mitchell Woodbine
-# Date:   Sun 06 Jul 2025
-# Version: 2.1 - Simplified logic by removing redundant 'yay' checks.
+# Github: https://github.com/vindennl48/pacsync
 # ==============================================================================
 
 # --- Configuration ---
@@ -168,7 +167,7 @@ EOF
 
 # --- An array of custom modules to execute ---
 # Each item corresponds to a file in the 'modules' subdirectory
-# next to the pacman-sync.sh script.
+# next to the pacsync script.
 # The 'install' function in these modules will only be run once.
 # If you remove a module from this list, its 'uninstall' function will be run.
 # Modules can also define their own 'packages' and 'aur_packages' arrays.
