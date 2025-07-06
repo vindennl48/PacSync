@@ -269,7 +269,7 @@ sync_aur_packages() {
     desired_aur_list=$(printf "%s\n" "${packages_to_sync[@]}" | sort -u)
 
     local installed_aur_packages
-    installed_aur_packages=$(${YAY_CMD} -Qemq | sort)
+    installed_aur_packages=$(${YAY_CMD} -Qemq 2>/dev/null | grep -v ' -> ' | sort)
     
     # First, find all packages that are installed but not in the config.
     local to_remove_raw
@@ -291,7 +291,7 @@ sync_aur_packages() {
 clean_orphans() {
     info "Checking for orphan packages..."
     local orphans
-    orphans=$(${YAY_CMD} -Qdtq || true)
+    orphans=$(${YAY_CMD} -Qdtq 2>/dev/null | grep -v ' -> ' || true)
 
     if [[ -n "$orphans" ]]; then
         info "The following orphan packages will be REMOVED:"
