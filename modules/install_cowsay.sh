@@ -10,10 +10,15 @@ packages=(
 
 # The main function that will be executed by the sync script
 # after all packages have been installed.
-module() {
+install() {
   echo "----> Configuring CowSay resources..."
 
   cowsay "Hello World!"
 
   echo "----> CowSay configuration complete!"
+}
+
+uninstall() {
+  echo "----> Uninstalling CowSay..."
+  echo "----> CowSay uninstalled!"
 }
