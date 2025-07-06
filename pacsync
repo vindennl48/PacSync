@@ -134,10 +134,14 @@ packages=(
   # less
   # htop
 
-  # --- Desktop Environment & GUI Apps ---
-  # gnome
+  # --- GUI Apps ---
   # firefox
   # vlc
+
+  # --- Desktop Environment ---
+  # Most likely want to install via modules to avoid missing any setup actions
+  # gnome
+  # plasma-meta 
 
   # --- For safety, all currently installed explicit packages have been added below. ---
   # --- Please review this list and curate it to your needs. ---
@@ -170,6 +174,7 @@ EOF
 # Modules can also define their own 'packages' and 'aur_packages' arrays.
 modules=(
   # install_cowsay
+  # install_plasma
 )
 EOF
 
