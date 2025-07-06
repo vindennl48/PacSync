@@ -13,6 +13,7 @@ set -euo pipefail
 # --- Globals and Constants ---
 SCRIPT_DIR=$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")
 MODULES_DIR="${SCRIPT_DIR}/modules"
+SUDO_YAY_FORCE=false
 
 # Packages that the script manages or depends on, which should never be auto-removed.
 readonly PACKAGES_TO_IGNORE=(
@@ -30,6 +31,17 @@ C_YELLOW='\033[1;33m'
 C_NC='\033[0m'
 
 # --- Functions ---
+usage() {
+  echo "Usage: sudo $0 [options]"
+  echo
+  echo "A wrapper for pacman/yay to sync system state with a config file."
+  echo
+  echo "Options:"
+  echo "  --sudo-yay   Force yay to run directly as the root user. This avoids"
+  echo "               password prompts for sudo but is NOT RECOMMENDED due to"
+  echo "               the security risks of building packages as root."
+  echo "  -h, --help   Show this help message and exit."
+}
 
 info() {
   printf "${C_BLUE}==>${C_NC} %s\n" "$1"
@@ -204,13 +216,7 @@ resolve_package_list() {
 
 update_system() {
     info "Starting full system upgrade (Official Repos + AUR)..."
-    # Run yay as the original user. yay will handle its own sudo calls internally.
-    if [[ -n "$SUDO_USER" ]]; then
-        sudo -u "$SUDO_USER" yay -Syu --noconfirm
-    else
-        # Fallback if run directly as root
-        yay -Syu --noconfirm
-    fi
+    ${YAY_CMD} -Syu --noconfirm
     success "System is up-to-date."
 }
 
@@ -255,22 +261,15 @@ sync_aur_packages() {
         return
     fi
     info "Syncing AUR packages..."
-    if [[ -n "$SUDO_USER" ]]; then
-        sudo -u "$SUDO_USER" yay -S --needed --noconfirm "${packages_to_sync[@]}"
-    else
-        yay -S --needed --noconfirm "${packages_to_sync[@]}"
-    fi
+    ${YAY_CMD} -S --needed --noconfirm "${packages_to_sync[@]}"
     
     info "Calculating extraneous AUR packages to remove..."
+
     local desired_aur_list
     desired_aur_list=$(printf "%s\n" "${packages_to_sync[@]}" | sort -u)
+
     local installed_aur_packages
-    # This query doesn't need privileges, but running as user is consistent.
-    if [[ -n "$SUDO_USER" ]]; then
-        installed_aur_packages=$(sudo -u "$SUDO_USER" yay -Qemq | sort)
-    else
-        installed_aur_packages=$(yay -Qemq | sort)
-    fi
+    installed_aur_packages=$(${YAY_CMD} -Qemq | sort)
     
     # First, find all packages that are installed but not in the config.
     local to_remove_raw
@@ -283,11 +282,7 @@ sync_aur_packages() {
     if [[ -n "$to_remove" ]]; then
         info "The following AUR packages are installed but not in the config; they will be REMOVED:"
         printf "${C_RED}%s\n${C_NC}" "${to_remove}"
-        if [[ -n "$SUDO_USER" ]]; then
-            sudo -u "$SUDO_USER" yay -Rns --noconfirm ${to_remove}
-        else
-            yay -Rns --noconfirm ${to_remove}
-        fi
+        ${YAY_CMD} -Rns --noconfirm ${to_remove}
     else
         success "No extraneous AUR packages to remove."
     fi
@@ -296,20 +291,12 @@ sync_aur_packages() {
 clean_orphans() {
     info "Checking for orphan packages..."
     local orphans
-    if [[ -n "$SUDO_USER" ]]; then
-        orphans=$(sudo -u "$SUDO_USER" yay -Qdtq || true)
-    else
-        orphans=$(yay -Qdtq || true)
-    fi
+    orphans=$(${YAY_CMD} -Qdtq || true)
 
     if [[ -n "$orphans" ]]; then
         info "The following orphan packages will be REMOVED:"
         printf "${C_YELLOW}%s\n${C_NC}" "${orphans}"
-        if [[ -n "$SUDO_USER" ]]; then
-            sudo -u "$SUDO_USER" yay -Rns --noconfirm ${orphans}
-        else
-            yay -Rns --noconfirm ${orphans}
-        fi
+        ${YAY_CMD} -Rns --noconfirm ${orphans}
     else
         success "No orphan packages found."
     fi
@@ -326,17 +313,31 @@ clean_cache() {
         pacman -Sc --noconfirm
     fi
     info "Cleaning yay's build cache and downloaded archives..."
-    if [[ -n "$SUDO_USER" ]]; then
-        sudo -u "$SUDO_USER" yay -Scc --noconfirm
-    else
-        yay -Scc --noconfirm
-    fi
+    ${YAY_CMD} -Scc --noconfirm
     success "Caches cleaned."
 }
 
 
 # --- Main Execution Logic ---
 main() {
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --sudo-yay)
+          SUDO_YAY_FORCE=true
+          shift # past argument
+          ;;
+        -h|--help)
+          usage
+          exit 0
+          ;;
+        *)
+          error "Unknown option: $1"
+          usage
+          exit 1
+          ;;
+      esac
+    done
+
     if [[ $EUID -ne 0 ]]; then
        error "This script must be run as root. Use 'sudo'."
        exit 1
@@ -352,6 +353,22 @@ main() {
     
     CONFIG_FILE="${user_home}/packages.conf"
     MODULE_STATE_FILE="${user_home}/modules.conf"
+
+    YAY_CMD="yay"
+    if [[ "$SUDO_YAY_FORCE" = true ]]; then
+        warning "Using --sudo-yay flag. Running yay directly as root."
+        warning "This is NOT recommended and can be a security risk."
+        # Script is already root, so this runs yay as root.
+        # This will prevent sudo password prompts from yay.
+        YAY_CMD="yay"
+    elif [[ -n "$SUDO_USER" ]]; then
+        # The standard, safe way: run yay as the original user.
+        # yay will then call sudo internally and may prompt for a password.
+        YAY_CMD="sudo -u $SUDO_USER yay"
+    else
+        # Fallback for direct root login (no SUDO_USER).
+        YAY_CMD="yay"
+    fi
 
     if [[ ! -f "$CONFIG_FILE" ]]; then
         create_config_file
@@ -479,4 +496,4 @@ main() {
     success "System synchronization and configuration complete!"
 }
 
-main
+main "$@"
