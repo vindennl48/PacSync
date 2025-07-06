@@ -43,6 +43,7 @@ error() {
 }
 
 install_yay_if_needed() {
+    # If yay is already present, we don't need to do anything.
     if command -v yay &> /dev/null; then
         return 0
     fi
@@ -59,7 +60,7 @@ install_yay_if_needed() {
     # Use a trap to ensure the cleanup function is called on exit or error
     trap 'rm -rf "$build_dir"' EXIT
 
-    # This allows the non-root 'makepkg' process to write to it.
+    # Change ownership of the build directory to the original user
     if [[ -n "$SUDO_USER" ]]; then
         chown "${SUDO_UID}:${SUDO_GID}" "$build_dir"
     fi
@@ -68,7 +69,6 @@ install_yay_if_needed() {
     
     # Clone, build, and install yay
     info "Cloning yay from the AUR..."
-    # It's better to run the clone as the user as well for file ownership consistency
     if [[ -n "$SUDO_USER" ]]; then
         sudo -u "$SUDO_USER" git clone https://aur.archlinux.org/yay.git
     else
@@ -78,11 +78,9 @@ install_yay_if_needed() {
     cd yay || { error "Could not enter cloned yay directory."; return 1; }
     
     info "Building and installing yay..."
-    # Run makepkg as the original user to avoid permissions issues and security risks
     if [[ -n "$SUDO_USER" ]]; then
         sudo -u "$SUDO_USER" makepkg -si --noconfirm
     else
-        # Fallback for running directly as root, though not recommended for makepkg
         warning "Running makepkg as root. This is not recommended for security."
         makepkg -si --noconfirm
     fi
@@ -91,9 +89,18 @@ install_yay_if_needed() {
     trap - EXIT
     rm -rf "$build_dir"
 
-    # Verify installation
+    # Verify installation and update the config file
     if command -v yay &> /dev/null; then
         success "yay has been successfully installed!"
+        
+        # --- FIX: Add yay and yay-debug to the config file to prevent removal ---
+        info "Adding 'yay' and 'yay-debug' to ${CONFIG_FILE} to prevent removal..."
+        # We use sed to append the new packages right after the 'packages=(' line.
+        # The '\n' ensures they are on separate lines, and the '  ' provides indentation.
+        sed -i '/^packages=(/a \  yay\n  yay-debug' "${CONFIG_FILE}"
+        success "'yay' and 'yay-debug' have been added to your configuration."
+        # --- END FIX ---
+        
         return 0
     else
         error "Failed to install yay. Please install it manually."
