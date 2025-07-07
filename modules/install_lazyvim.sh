@@ -25,7 +25,7 @@ install() {
   mv "${user_home}"/.cache/nvim{,.bak} || true
 
   echo "      Cloning Repo..."
-  git clone https://github.com/LazyVim/starter "${user_home}"/.config/nvim
+  sudo -u "$SUDO_USER" git clone https://github.com/LazyVim/starter "${user_home}"/.config/nvim
   rm -rf "${user_home}"/.config/nvim/.git
 
   # --- Customization ---
