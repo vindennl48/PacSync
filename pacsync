@@ -184,11 +184,6 @@ EOF
 # If you remove a module from this list, its 'uninstall' function will be run.
 # Modules can also define their own 'packages' and 'aur_packages' arrays.
 modules=(
-  # install_cowsay
-  # install_openssh
-  # install_plasma
-  # install_xrdp
-)
 EOF
 
     # Set the correct file ownership
