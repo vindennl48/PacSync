@@ -2,7 +2,7 @@
 
 # An array of packages required by this module.
 # The main script will ensure these are installed.
-packages=(
+aur_packages=(
   xrdp
   xorgxrdp
   pipewire-module-xrdp
