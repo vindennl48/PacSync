@@ -17,7 +17,11 @@ install() {
   # --- Customization ---
   local user_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
   sed -i 's/^OSH_THEME=.*/OSH_THEME="powerbash10k"/' "${user_home}/.bashrc"
-  echo "export EDITOR=vim" >> "${user_home}/.bashrc"
+  echo "export EDITOR=vim" >>"${user_home}/.bashrc"
+
+  echo "alias vim='nvim'" >>"${user_home}/.bashrc"
+  echo "alias vi='nvim'" >>"${user_home}/.bashrc"
+  echo "alias v='nvim'" >>"${user_home}/.bashrc"
   # --- End Customization ---
 
   echo "----> Configuration Complete!"
