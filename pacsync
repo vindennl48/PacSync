@@ -186,6 +186,19 @@ EOF
 modules=(
 EOF
 
+    # Dynamically add all available modules from the modules directory, commented out
+    if [[ -d "$MODULES_DIR" ]]; then
+        for module_file in "${MODULES_DIR}"/install_*.sh; do
+            if [[ -f "$module_file" ]]; then
+                module_name=$(basename "$module_file" .sh)
+                echo "  # ${module_name}" >> "${CONFIG_FILE}"
+            fi
+        done
+    fi
+
+    # Write the static footer that closes the modules array
+    echo ")" >> "${CONFIG_FILE}"
+
     # Set the correct file ownership
     if [[ -n "$SUDO_USER" ]]; then
         chown "${SUDO_UID}:${SUDO_GID}" "${CONFIG_FILE}"
@@ -215,71 +228,45 @@ update_system() {
     success "System is up-to-date."
 }
 
-sync_packages() {
-    local -a packages_to_sync=("${@}")
+sync_package_list() {
+    local -r type="$1"
+    local -r install_cmd="$2"
+    local -r list_cmd="$3"
+    local -r remove_cmd="$4"
+    shift 4
+    local -a packages_to_sync=("$@")
+
     if ((${#packages_to_sync[@]} == 0)); then
-        warning "Official package list is empty. Nothing to sync."
+        warning "${type} package list is empty. Nothing to sync."
         return
     fi
-    info "Syncing official repository packages..."
-    pacman -S --needed --noconfirm "${packages_to_sync[@]}"
-    info "Calculating extraneous official packages to remove..."
-    local fully_resolved_list
-    fully_resolved_list=$(resolve_package_list "${packages_to_sync[*]}")
-    local installed_packages
-    installed_packages=$(pacman -Qeq)
-    
-    # First, find all packages that are installed but not in the config.
-    local to_remove_raw
-    to_remove_raw=$(comm -13 <(echo "${fully_resolved_list}" | tr ' ' '\n' | sort) <(echo "${installed_packages}" | sort))
 
-    # --- Filter out packages from our ignore list ---
-    # This prevents the script from uninstalling its own dependencies (e.g., yay).
-    # grep options: -v (invert), -x (exact line), -F (fixed string), -f (read patterns from file/process).
-    # The '|| true' prevents the script from exiting if grep finds no packages to remove.
-    local to_remove
-    to_remove=$(echo "${to_remove_raw}" | grep -v -x -F -f <(printf "%s\n" "${PACKAGES_TO_IGNORE[@]}") || true)
-    
-    if [[ -n "$to_remove" ]]; then
-        info "The following official packages are installed but not in the config; they will be REMOVED:"
-        printf "${C_RED}%s\n${C_NC}" "${to_remove}"
-        pacman -Rns --noconfirm ${to_remove}
+    info "Syncing ${type} packages..."
+    ${install_cmd} --needed --noconfirm "${packages_to_sync[@]}"
+
+    info "Calculating extraneous ${type} packages to remove..."
+    local desired_list
+    if [[ "$type" == "Official" ]]; then
+        desired_list=$(resolve_package_list "${packages_to_sync[*]}")
     else
-        success "No extraneous official packages to remove."
+        desired_list=$(printf "%s\n" "${packages_to_sync[@]}" | sort -u)
     fi
-}
-
-sync_aur_packages() {
-    local -a packages_to_sync=("${@}")
-    if ((${#packages_to_sync[@]} == 0)); then
-        warning "AUR package list is empty. Nothing to sync."
-        return
-    fi
-    info "Syncing AUR packages..."
-    ${YAY_CMD} -S --needed --noconfirm "${packages_to_sync[@]}"
     
-    info "Calculating extraneous AUR packages to remove..."
+    local installed_list
+    installed_list=$(${list_cmd})
 
-    local desired_aur_list
-    desired_aur_list=$(printf "%s\n" "${packages_to_sync[@]}" | sort -u)
-
-    local installed_aur_packages
-    installed_aur_packages=$(${YAY_CMD} -Qemq 2>/dev/null | grep -v ' -> ' | sort)
-    
-    # First, find all packages that are installed but not in the config.
     local to_remove_raw
-    to_remove_raw=$(comm -13 <(echo "${desired_aur_list}") <(echo "${installed_aur_packages}"))
-
-    # Filter out packages from our ignore list
+    to_remove_raw=$(comm -13 <(echo "${desired_list}" | tr ' ' '\n' | sort) <(echo "${installed_list}" | sort))
+    
     local to_remove
     to_remove=$(echo "${to_remove_raw}" | grep -v -x -F -f <(printf "%s\n" "${PACKAGES_TO_IGNORE[@]}") || true)
 
     if [[ -n "$to_remove" ]]; then
-        info "The following AUR packages are installed but not in the config; they will be REMOVED:"
+        info "The following ${type} packages are installed but not in the config; they will be REMOVED:"
         printf "${C_RED}%s\n${C_NC}" "${to_remove}"
-        ${YAY_CMD} -Rns --noconfirm ${to_remove}
+        ${remove_cmd} --noconfirm ${to_remove}
     else
-        success "No extraneous AUR packages to remove."
+        success "No extraneous ${type} packages to remove."
     fi
 }
 
@@ -432,8 +419,8 @@ main() {
     # --- EXECUTION STAGES ---
     
     update_system
-    sync_packages "${combined_packages[@]}"
-    sync_aur_packages "${combined_aur_packages[@]}"
+    sync_package_list "Official" "pacman -S" "pacman -Qeq" "pacman -Rns" "${combined_packages[@]}"
+    sync_package_list "AUR" "${YAY_CMD} -S" "${YAY_CMD} -Qemq" "${YAY_CMD} -Rns" "${combined_aur_packages[@]}"
 
     # --- Module Uninstallation ---
     if ((${#modules_to_uninstall[@]} > 0)); then
