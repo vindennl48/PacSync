@@ -60,70 +60,76 @@ error() {
 }
 
 install_yay_if_needed() {
-    if command -v yay &> /dev/null; then
-        return 0
-    fi
-    
-    info "yay is not installed. Attempting to install it..."
-    
-    # Install dependencies
-    pacman -S --needed --noconfirm git base-devel
-    
-    # Create a temporary directory for building
-    local build_dir
-    build_dir=$(mktemp -d)
-    
-    # Use a trap to ensure the cleanup function is called on exit or error
-    trap 'rm -rf "$build_dir"' EXIT
+  if command -v yay &>/dev/null; then
+    return 0
+  fi
 
-    # Change ownership of the build directory to the original user
-    # This allows the non-root 'makepkg' process to write to it.
-    if [[ -n "$SUDO_USER" ]]; then
-        chown "${SUDO_UID}:${SUDO_GID}" "$build_dir"
-    fi
-    
-    cd "$build_dir" || { error "Could not enter temporary build directory."; return 1; }
-    
-    # Clone, build, and install yay
-    info "Cloning yay from the AUR..."
-    # It's better to run the clone as the user as well for file ownership consistency
-    if [[ -n "$SUDO_USER" ]]; then
-        sudo -u "$SUDO_USER" git clone https://aur.archlinux.org/yay.git
-    else
-        git clone https://aur.archlinux.org/yay.git
-    fi
-    
-    cd yay || { error "Could not enter cloned yay directory."; return 1; }
-    
-    info "Building and installing yay..."
-    # Run makepkg as the original user to avoid permissions issues and security risks
-    if [[ -n "$SUDO_USER" ]]; then
-        sudo -u "$SUDO_USER" makepkg -si --noconfirm
-    else
-        # Fallback for running directly as root, though not recommended for makepkg
-        warning "Running makepkg as root. This is not recommended for security."
-        makepkg -si --noconfirm
-    fi
-    
-    # Cleanup is handled by the trap
-    trap - EXIT
-    rm -rf "$build_dir"
+  info "yay is not installed. Attempting to install it..."
 
-    # Verify installation
-    if command -v yay &> /dev/null; then
-        success "yay has been successfully installed!"
-        return 0
-    else
-        error "Failed to install yay. Please install it manually."
-        return 1
-    fi
+  # Install dependencies
+  pacman -S --needed --noconfirm git base-devel
+
+  # Create a temporary directory for building
+  local build_dir
+  build_dir=$(mktemp -d)
+
+  # Use a trap to ensure the cleanup function is called on exit or error
+  trap 'rm -rf "$build_dir"' EXIT
+
+  # Change ownership of the build directory to the original user
+  # This allows the non-root 'makepkg' process to write to it.
+  if [[ -n "$SUDO_USER" ]]; then
+    chown "${SUDO_UID}:${SUDO_GID}" "$build_dir"
+  fi
+
+  cd "$build_dir" || {
+    error "Could not enter temporary build directory."
+    return 1
+  }
+
+  # Clone, build, and install yay
+  info "Cloning yay from the AUR..."
+  # It's better to run the clone as the user as well for file ownership consistency
+  if [[ -n "$SUDO_USER" ]]; then
+    sudo -u "$SUDO_USER" git clone https://aur.archlinux.org/yay.git
+  else
+    git clone https://aur.archlinux.org/yay.git
+  fi
+
+  cd yay || {
+    error "Could not enter cloned yay directory."
+    return 1
+  }
+
+  info "Building and installing yay..."
+  # Run makepkg as the original user to avoid permissions issues and security risks
+  if [[ -n "$SUDO_USER" ]]; then
+    sudo -u "$SUDO_USER" makepkg -si --noconfirm
+  else
+    # Fallback for running directly as root, though not recommended for makepkg
+    warning "Running makepkg as root. This is not recommended for security."
+    makepkg -si --noconfirm
+  fi
+
+  # Cleanup is handled by the trap
+  trap - EXIT
+  rm -rf "$build_dir"
+
+  # Verify installation
+  if command -v yay &>/dev/null; then
+    success "yay has been successfully installed!"
+    return 0
+  else
+    error "Failed to install yay. Please install it manually."
+    return 1
+  fi
 }
 
 create_config_file() {
-    info "Configuration file not found. Creating a new one at ${CONFIG_FILE}..."
+  info "Configuration file not found. Creating a new one at ${CONFIG_FILE}..."
 
-    # Write the static header and the beginning of the packages array
-    cat << 'EOF' > "${CONFIG_FILE}"
+  # Write the static header and the beginning of the packages array
+  cat <<'EOF' >"${CONFIG_FILE}"
 # ==========================================================
 # My Arch Linux System - Maintained Packages & Modules
 #
@@ -159,11 +165,11 @@ packages=(
   # --- Core System ---
 EOF
 
-    # Dynamically append the list of currently installed packages into the array
-    pacman -Qeq | sed 's/^/  /' >> "${CONFIG_FILE}" || true
+  # Dynamically append the list of currently installed packages into the array
+  pacman -Qenq | sed 's/^/  /' >>"${CONFIG_FILE}" || true
 
-    # Write the static footer that closes the packages array and defines the modules array
-    cat << 'EOF' >> "${CONFIG_FILE}"
+  # Write the static footer that closes the packages array and defines the modules array
+  cat <<'EOF' >>"${CONFIG_FILE}"
 )
 
 # --- An array of packages from the Arch User Repository (AUR) ---
@@ -171,10 +177,10 @@ EOF
 aur_packages=(
   # --- For safety, all currently installed foreign (AUR) packages have been added below. ---
 EOF
-    # Append currently installed foreign (AUR) packages
-    pacman -Qemq | sed 's/^/  /' >> "${CONFIG_FILE}" || true
+  # Append currently installed foreign (AUR) packages
+  pacman -Qemq | sed 's/^/  /' >>"${CONFIG_FILE}" || true
 
-    cat << 'EOF' >> "${CONFIG_FILE}"
+  cat <<'EOF' >>"${CONFIG_FILE}"
 )
 
 # --- An array of custom modules to execute ---
@@ -186,296 +192,295 @@ EOF
 modules=(
 EOF
 
-    # Dynamically add all available modules from the modules directory, commented out
-    if [[ -d "$MODULES_DIR" ]]; then
-        for module_file in "${MODULES_DIR}"/install_*.sh; do
-            if [[ -f "$module_file" ]]; then
-                module_name=$(basename "$module_file" .sh)
-                echo "  # ${module_name}" >> "${CONFIG_FILE}"
-            fi
-        done
-    fi
+  # Dynamically add all available modules from the modules directory, commented out
+  if [[ -d "$MODULES_DIR" ]]; then
+    for module_file in "${MODULES_DIR}"/install_*.sh; do
+      if [[ -f "$module_file" ]]; then
+        module_name=$(basename "$module_file" .sh)
+        echo "  # ${module_name}" >>"${CONFIG_FILE}"
+      fi
+    done
+  fi
 
-    # Write the static footer that closes the modules array
-    echo ")" >> "${CONFIG_FILE}"
+  # Write the static footer that closes the modules array
+  echo ")" >>"${CONFIG_FILE}"
 
-    # Set the correct file ownership
-    if [[ -n "$SUDO_USER" ]]; then
-        chown "${SUDO_UID}:${SUDO_GID}" "${CONFIG_FILE}"
-    fi
-    success "File created successfully."
+  # Set the correct file ownership
+  if [[ -n "$SUDO_USER" ]]; then
+    chown "${SUDO_UID}:${SUDO_GID}" "${CONFIG_FILE}"
+  fi
+  success "File created successfully."
 }
 
 resolve_package_list() {
-    local raw_list="$1"
-    local resolved_list=""
-    info "Checking package databases for group definitions..."
-    pacman -Sy >/dev/null 2>&1
-    for item in ${raw_list}; do
-        if members=$(pacman -Sgq "${item}" 2>/dev/null); then
-            info "Resolving group '${item}' to its members."
-            resolved_list+="${members} "
-        else
-            resolved_list+="${item} "
-        fi
-    done
-    echo "${resolved_list}" | tr ' ' '\n' | sort -u | tr '\n' ' '
+  local raw_list="$1"
+  local resolved_list=""
+  info "Checking package databases for group definitions..."
+  pacman -Sy >/dev/null 2>&1
+  for item in ${raw_list}; do
+    if members=$(pacman -Sgq "${item}" 2>/dev/null); then
+      info "Resolving group '${item}' to its members."
+      resolved_list+="${members} "
+    else
+      resolved_list+="${item} "
+    fi
+  done
+  echo "${resolved_list}" | tr ' ' '\n' | sort -u | tr '\n' ' '
 }
 
 update_system() {
-    info "Starting full system upgrade (Official Repos + AUR)..."
-    ${YAY_CMD} -Syu --noconfirm
-    success "System is up-to-date."
+  info "Starting full system upgrade (Official Repos + AUR)..."
+  ${YAY_CMD} -Syu --noconfirm
+  success "System is up-to-date."
 }
 
 sync_package_list() {
-    local -r type="$1"
-    local -r install_cmd="$2"
-    local -r list_cmd="$3"
-    local -r remove_cmd="$4"
-    shift 4
-    local -a packages_to_sync=("$@")
+  local -r type="$1"
+  local -r install_cmd="$2"
+  local -r list_cmd="$3"
+  local -r remove_cmd="$4"
+  shift 4
+  local -a packages_to_sync=("$@")
 
-    if ((${#packages_to_sync[@]} == 0)); then
-        warning "${type} package list is empty. Nothing to sync."
-        return
-    fi
+  if ((${#packages_to_sync[@]} == 0)); then
+    warning "${type} package list is empty. Nothing to sync."
+    return
+  fi
 
-    info "Syncing ${type} packages..."
-    ${install_cmd} --needed --noconfirm "${packages_to_sync[@]}"
+  info "Syncing ${type} packages..."
+  ${install_cmd} --needed --noconfirm "${packages_to_sync[@]}"
 
-    info "Calculating extraneous ${type} packages to remove..."
-    local desired_list
-    if [[ "$type" == "Official" ]]; then
-        desired_list=$(resolve_package_list "${packages_to_sync[*]}")
-    else
-        desired_list=$(printf "%s\n" "${packages_to_sync[@]}" | sort -u)
-    fi
-    
-    local installed_list
-    installed_list=$(${list_cmd})
+  info "Calculating extraneous ${type} packages to remove..."
+  local desired_list
+  if [[ "$type" == "Official" ]]; then
+    desired_list=$(resolve_package_list "${packages_to_sync[*]}")
+  else
+    desired_list=$(printf "%s\n" "${packages_to_sync[@]}" | sort -u)
+  fi
 
-    local to_remove_raw
-    to_remove_raw=$(comm -13 <(echo "${desired_list}" | tr ' ' '\n' | sort) <(echo "${installed_list}" | sort))
-    
-    local to_remove
-    to_remove=$(echo "${to_remove_raw}" | grep -v -x -F -f <(printf "%s\n" "${PACKAGES_TO_IGNORE[@]}") || true)
+  local installed_list
+  installed_list=$(${list_cmd})
 
-    if [[ -n "$to_remove" ]]; then
-        info "The following ${type} packages are installed but not in the config; they will be REMOVED:"
-        printf "${C_RED}%s\n${C_NC}" "${to_remove}"
-        ${remove_cmd} --noconfirm ${to_remove}
-    else
-        success "No extraneous ${type} packages to remove."
-    fi
+  local to_remove_raw
+  to_remove_raw=$(comm -13 <(echo "${desired_list}" | tr ' ' '\n' | sort) <(echo "${installed_list}" | sort))
+
+  local to_remove
+  to_remove=$(echo "${to_remove_raw}" | grep -v -x -F -f <(printf "%s\n" "${PACKAGES_TO_IGNORE[@]}") || true)
+
+  if [[ -n "$to_remove" ]]; then
+    info "The following ${type} packages are installed but not in the config; they will be REMOVED:"
+    printf "${C_RED}%s\n${C_NC}" "${to_remove}"
+    ${remove_cmd} --noconfirm ${to_remove}
+  else
+    success "No extraneous ${type} packages to remove."
+  fi
 }
 
 clean_orphans() {
-    info "Checking for orphan packages..."
-    local orphans
-    orphans=$(${YAY_CMD} -Qdtq 2>/dev/null | grep -v ' -> ' || true)
+  info "Checking for orphan packages..."
+  local orphans
+  orphans=$(${YAY_CMD} -Qdtq 2>/dev/null | grep -v ' -> ' || true)
 
-    if [[ -n "$orphans" ]]; then
-        info "The following orphan packages will be REMOVED:"
-        printf "${C_YELLOW}%s\n${C_NC}" "${orphans}"
-        ${YAY_CMD} -Rns --noconfirm ${orphans}
-    else
-        success "No orphan packages found."
-    fi
+  if [[ -n "$orphans" ]]; then
+    info "The following orphan packages will be REMOVED:"
+    printf "${C_YELLOW}%s\n${C_NC}" "${orphans}"
+    ${YAY_CMD} -Rns --noconfirm ${orphans}
+  else
+    success "No orphan packages found."
+  fi
 }
 
 clean_cache() {
-    info "Cleaning up pacman and yay caches..."
-    if command -v paccache &> /dev/null; then
-        info "Using 'paccache' for smart pacman cache cleaning."
-        paccache -r && paccache -ruk0
-    else
-        warning "Command 'paccache' not found. Using 'pacman -Sc' for basic cleaning."
-        warning "For better cache management, please install 'pacman-contrib'."
-        pacman -Sc --noconfirm
-    fi
-    info "Cleaning yay's build cache and downloaded archives..."
-    ${YAY_CMD} -Scc --noconfirm
-    success "Caches cleaned."
+  info "Cleaning up pacman and yay caches..."
+  if command -v paccache &>/dev/null; then
+    info "Using 'paccache' for smart pacman cache cleaning."
+    paccache -r && paccache -ruk0
+  else
+    warning "Command 'paccache' not found. Using 'pacman -Sc' for basic cleaning."
+    warning "For better cache management, please install 'pacman-contrib'."
+    pacman -Sc --noconfirm
+  fi
+  info "Cleaning yay's build cache and downloaded archives..."
+  ${YAY_CMD} -Scc --noconfirm
+  success "Caches cleaned."
 }
-
 
 # --- Main Execution Logic ---
 main() {
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --sudo-yay)
-          SUDO_YAY_FORCE=true
-          shift # past argument
-          ;;
-        -h|--help)
-          usage
-          exit 0
-          ;;
-        *)
-          error "Unknown option: $1"
-          usage
-          exit 1
-          ;;
-      esac
-    done
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --sudo-yay)
+      SUDO_YAY_FORCE=true
+      shift # past argument
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      error "Unknown option: $1"
+      usage
+      exit 1
+      ;;
+    esac
+  done
 
-    if [[ $EUID -ne 0 ]]; then
-       error "This script must be run as root. Use 'sudo'."
-       exit 1
-    fi
+  if [[ $EUID -ne 0 ]]; then
+    error "This script must be run as root. Use 'sudo'."
+    exit 1
+  fi
 
-    local user_home
-    if [[ -n "$SUDO_USER" ]]; then
-        user_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-    else
-        warning "Running directly as root. Looking for config in /root."
-        user_home="$HOME"
-    fi
-    
-    CONFIG_FILE="${user_home}/packages.conf"
-    MODULE_STATE_FILE="${user_home}/modules.conf"
+  local user_home
+  if [[ -n "$SUDO_USER" ]]; then
+    user_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+  else
+    warning "Running directly as root. Looking for config in /root."
+    user_home="$HOME"
+  fi
 
+  CONFIG_FILE="${user_home}/packages.conf"
+  MODULE_STATE_FILE="${user_home}/modules.conf"
+
+  YAY_CMD="yay"
+  if [[ "$SUDO_YAY_FORCE" = true ]]; then
+    warning "Using --sudo-yay flag. Running yay directly as root."
+    warning "This is NOT recommended and can be a security risk."
+    # Script is already root, so this runs yay as root.
+    # This will prevent sudo password prompts from yay.
     YAY_CMD="yay"
-    if [[ "$SUDO_YAY_FORCE" = true ]]; then
-        warning "Using --sudo-yay flag. Running yay directly as root."
-        warning "This is NOT recommended and can be a security risk."
-        # Script is already root, so this runs yay as root.
-        # This will prevent sudo password prompts from yay.
-        YAY_CMD="yay"
-    elif [[ -n "$SUDO_USER" ]]; then
-        # The standard, safe way: run yay as the original user.
-        # yay will then call sudo internally and may prompt for a password.
-        YAY_CMD="sudo -u $SUDO_USER yay"
+  elif [[ -n "$SUDO_USER" ]]; then
+    # The standard, safe way: run yay as the original user.
+    # yay will then call sudo internally and may prompt for a password.
+    YAY_CMD="sudo -u $SUDO_USER yay"
+  else
+    # Fallback for direct root login (no SUDO_USER).
+    YAY_CMD="yay"
+  fi
+
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    create_config_file
+    info "A new config file has been created."
+    warning "Please review and edit ${CONFIG_FILE} before running this script again."
+    exit 0
+  fi
+
+  # --- Make sure Yay is installed ---
+  if ! install_yay_if_needed; then
+    exit 1 # The function will print its own detailed error
+  fi
+
+  # --- MODULE AND PACKAGE PROCESSING ---
+  info "Reading configuration from ${CONFIG_FILE}"
+  source "${CONFIG_FILE}"
+
+  # Load the list of already-installed modules
+  local -a installed_modules=()
+  if [[ -f "$MODULE_STATE_FILE" ]]; then
+    mapfile -t installed_modules <"$MODULE_STATE_FILE"
+  else
+    # If the state file doesn't exist, create it
+    touch "$MODULE_STATE_FILE"
+    if [[ -n "$SUDO_USER" ]]; then
+      chown "${SUDO_UID}:${SUDO_GID}" "$MODULE_STATE_FILE"
+    fi
+  fi
+
+  # Determine which modules to install and uninstall
+  local -a modules_to_install=()
+  modules_to_install=($(comm -23 <(printf "%s\n" "${modules[@]}" | sort) <(printf "%s\n" "${installed_modules[@]}" | sort)))
+  local -a modules_to_uninstall=()
+  modules_to_uninstall=($(comm -13 <(printf "%s\n" "${modules[@]}" | sort) <(printf "%s\n" "${installed_modules[@]}" | sort)))
+
+  # --- Package List Aggregation ---
+  info "Aggregating package lists from config and all desired modules..."
+  local -a combined_packages=()
+  local -a combined_aur_packages=()
+
+  combined_packages+=("${packages[@]}")         # From packages.conf
+  combined_aur_packages+=("${aur_packages[@]}") # From packages.conf
+
+  local -a all_desired_modules=()
+  all_desired_modules=("${modules[@]}")
+
+  for module_name in "${all_desired_modules[@]}"; do
+    module_path="${MODULES_DIR}/${module_name}"
+    [[ -f "${module_path}.sh" ]] && module_path+=".sh"
+
+    if [[ -f "$module_path" ]]; then
+      # Source to get the package lists for this module
+      source "$module_path"
+      # Use 'declare -p' to safely check if arrays exist before appending
+      if declare -p packages &>/dev/null; then
+        combined_packages+=("${packages[@]}")
+      fi
+      if declare -p aur_packages &>/dev/null; then
+        combined_aur_packages+=("${aur_packages[@]}")
+      fi
     else
-        # Fallback for direct root login (no SUDO_USER).
-        YAY_CMD="yay"
+      error "Module '${module_name}' is desired but not found. Skipping its packages."
     fi
+  done
 
-    if [[ ! -f "$CONFIG_FILE" ]]; then
-        create_config_file
-        info "A new config file has been created."
-        warning "Please review and edit ${CONFIG_FILE} before running this script again."
-        exit 0
-    fi
+  # --- EXECUTION STAGES ---
 
-    # --- Make sure Yay is installed ---
-    if ! install_yay_if_needed; then
-      exit 1 # The function will print its own detailed error
-    fi
-    
-    # --- MODULE AND PACKAGE PROCESSING ---
-    info "Reading configuration from ${CONFIG_FILE}"
-    source "${CONFIG_FILE}"
+  update_system
+  sync_package_list "Official" "pacman -S" "pacman -Qenq" "pacman -Rns" "${combined_packages[@]}"
+  sync_package_list "AUR" "${YAY_CMD} -S" "${YAY_CMD} -Qemq" "${YAY_CMD} -Rns" "${combined_aur_packages[@]}"
 
-    # Load the list of already-installed modules
-    local -a installed_modules=()
-    if [[ -f "$MODULE_STATE_FILE" ]]; then
-        mapfile -t installed_modules < "$MODULE_STATE_FILE"
-    else
-        # If the state file doesn't exist, create it
-        touch "$MODULE_STATE_FILE"
-        if [[ -n "$SUDO_USER" ]]; then
-            chown "${SUDO_UID}:${SUDO_GID}" "$MODULE_STATE_FILE"
-        fi
-    fi
+  # --- Module Uninstallation ---
+  if ((${#modules_to_uninstall[@]} > 0)); then
+    info "Processing modules for uninstallation..."
+    for module_name in "${modules_to_uninstall[@]}"; do
+      info "--- Preparing to uninstall module: ${module_name} ---"
+      module_path="${MODULES_DIR}/${module_name}"
+      [[ -f "${module_path}.sh" ]] && module_path+=".sh"
 
-    # Determine which modules to install and uninstall
-    local -a modules_to_install=()
-    modules_to_install=($(comm -23 <(printf "%s\n" "${modules[@]}" | sort) <(printf "%s\n" "${installed_modules[@]}" | sort)))
-    local -a modules_to_uninstall=()
-    modules_to_uninstall=($(comm -13 <(printf "%s\n" "${modules[@]}" | sort) <(printf "%s\n" "${installed_modules[@]}" | sort)))
-
-    # --- Package List Aggregation ---
-    info "Aggregating package lists from config and all desired modules..."
-    local -a combined_packages=()
-    local -a combined_aur_packages=()
-
-    combined_packages+=("${packages[@]}") # From packages.conf
-    combined_aur_packages+=("${aur_packages[@]}") # From packages.conf
-
-    local -a all_desired_modules=()
-    all_desired_modules=("${modules[@]}")
-
-    for module_name in "${all_desired_modules[@]}"; do
-        module_path="${MODULES_DIR}/${module_name}"
-        [[ -f "${module_path}.sh" ]] && module_path+=".sh"
-
-        if [[ -f "$module_path" ]]; then
-            # Source to get the package lists for this module
-            source "$module_path"
-            # Use 'declare -p' to safely check if arrays exist before appending
-            if declare -p packages &>/dev/null; then
-              combined_packages+=("${packages[@]}")
-            fi
-            if declare -p aur_packages &>/dev/null; then
-              combined_aur_packages+=("${aur_packages[@]}")
-            fi
+      if [[ -f "$module_path" ]]; then
+        source "$module_path"
+        if [[ $(type -t uninstall) == "function" ]]; then
+          uninstall
+          success "Uninstall function for '${module_name}' executed."
         else
-            error "Module '${module_name}' is desired but not found. Skipping its packages."
+          warning "Module '${module_name}' has no uninstall function. Skipping."
         fi
+      fi
+      installed_modules=("${installed_modules[@]/${module_name}/}")
     done
-    
-    # --- EXECUTION STAGES ---
-    
-    update_system
-    sync_package_list "Official" "pacman -S" "pacman -Qeq" "pacman -Rns" "${combined_packages[@]}"
-    sync_package_list "AUR" "${YAY_CMD} -S" "${YAY_CMD} -Qemq" "${YAY_CMD} -Rns" "${combined_aur_packages[@]}"
+  fi
 
-    # --- Module Uninstallation ---
-    if ((${#modules_to_uninstall[@]} > 0)); then
-        info "Processing modules for uninstallation..."
-        for module_name in "${modules_to_uninstall[@]}"; do
-            info "--- Preparing to uninstall module: ${module_name} ---"
-            module_path="${MODULES_DIR}/${module_name}"
-            [[ -f "${module_path}.sh" ]] && module_path+=".sh"
-            
-            if [[ -f "$module_path" ]]; then
-                source "$module_path"
-                if [[ $(type -t uninstall) == "function" ]]; then
-                    uninstall
-                    success "Uninstall function for '${module_name}' executed."
-                else
-                    warning "Module '${module_name}' has no uninstall function. Skipping."
-                fi
-            fi
-            installed_modules=("${installed_modules[@]/${module_name}/}")
-        done
-    fi
+  # --- Module Installation ---
+  if ((${#modules_to_install[@]} > 0)); then
+    info "Processing modules for installation..."
+    for module_name in "${modules_to_install[@]}"; do
+      info "--- Preparing to install module: ${module_name} ---"
+      module_path="${MODULES_DIR}/${module_name}"
+      [[ -f "${module_path}.sh" ]] && module_path+=".sh"
 
-    # --- Module Installation ---
-    if ((${#modules_to_install[@]} > 0)); then
-        info "Processing modules for installation..."
-        for module_name in "${modules_to_install[@]}"; do
-            info "--- Preparing to install module: ${module_name} ---"
-            module_path="${MODULES_DIR}/${module_name}"
-            [[ -f "${module_path}.sh" ]] && module_path+=".sh"
+      if [[ -f "$module_path" ]]; then
+        source "$module_path"
+        if [[ $(type -t install) == "function" ]]; then
+          install
+          success "Install function for '${module_name}' executed."
+          installed_modules+=("${module_name}")
+        else
+          error "Module '${module_name}' has no install function. Cannot install."
+        fi
+      else
+        error "Module '${module_name}' not found at '${module_path}'. Cannot install."
+        read -p "Press [Enter] to continue..."
+      fi
+    done
+  fi
 
-            if [[ -f "$module_path" ]]; then
-                source "$module_path"
-                if [[ $(type -t install) == "function" ]]; then
-                    install
-                    success "Install function for '${module_name}' executed."
-                    installed_modules+=("${module_name}")
-                else
-                    error "Module '${module_name}' has no install function. Cannot install."
-                fi
-            else
-                error "Module '${module_name}' not found at '${module_path}'. Cannot install."
-                read -p "Press [Enter] to continue..."
-            fi
-        done
-    fi
+  # Update the module state file with the new, correct list
+  printf "%s\n" "${installed_modules[@]}" | sort | uniq >"$MODULE_STATE_FILE"
+  info "Module state file '${MODULE_STATE_FILE}' has been updated."
 
-    # Update the module state file with the new, correct list
-    printf "%s\n" "${installed_modules[@]}" | sort | uniq > "$MODULE_STATE_FILE"
-    info "Module state file '${MODULE_STATE_FILE}' has been updated."
+  # --- Final Cleanup ---
+  clean_orphans
+  clean_cache
 
-    # --- Final Cleanup ---
-    clean_orphans
-    clean_cache
-
-    success "System synchronization and configuration complete!"
+  success "System synchronization and configuration complete!"
 }
 
 main "$@"
