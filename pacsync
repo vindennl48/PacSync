@@ -242,12 +242,15 @@ sync_package_list() {
   shift 4
   local -a packages_to_sync=("$@")
 
-  if ((${#packages_to_sync[@]} == 0)); then
-    warning "${type} package list is empty. Nothing to sync."
-    return
-  fi
-
+  echo ""
   info "Syncing ${type} packages..."
+
+  # if ((${#packages_to_sync[@]} == 0)); then
+  #   warning "${type} package list is empty. Nothing to sync."
+  #   echo ""
+  #   return
+  # fi
+
   ${install_cmd} --needed --noconfirm "${packages_to_sync[@]}"
 
   info "Calculating extraneous ${type} packages to remove..."
@@ -274,6 +277,9 @@ sync_package_list() {
   else
     success "No extraneous ${type} packages to remove."
   fi
+
+  success "Finished syncing packages for ${type}!"
+  echo ""
 }
 
 clean_orphans() {
