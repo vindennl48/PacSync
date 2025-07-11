@@ -150,8 +150,15 @@ packages=(
   # vim
   # less
   # htop
+  # magic-wormhole
+  # pacman-contrib
+  # pyenv
+  # npm
+  # xclip
+  # man-db
 
   # --- GUI Apps ---
+  # ghostty
   # firefox
   # vlc
 
